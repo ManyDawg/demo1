@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>МОДУЛЬ 1</title>
+<style>
+body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 2rem; line-height: 1.7; color: #222; }
+h1 { margin-top: 2.5rem; font-size: 1.4rem; }
+h2 { margin-top: 1.8rem; font-size: 1.15rem; }
+h3 { margin-top: 1.2rem; font-size: 1rem; }
+p { margin: 0.25rem 0; }
+code { font-family: monospace; font-size: 0.9em; background: #f0f0f0; padding: 0.1em 0.35em; border-radius: 3px; }
+.screenshot { color: #888; font-size: 0.85em; margin: 0.2rem 0; }
+</style>
+</head>
+<body>
+<h1>МОДУЛЬ 1. Настройка сетевой инфраструктуры</h1>
+<h2>1. Базовая настройка устройств</h2>
+<p>Задание: Произведите базовую настройку устройств: настройте имена устройств согласно топологии, используя полное доменное имя. На всех устройствах необходимо сконфигурировать IPv4: IP-адрес должен быть из приватного диапазона, в случае если сеть локальная, согласно RFC1918. Сведения об адресах занесите в таблицу 2.</p>
+<p>Вставим ip_forward 1</p>
+<p><code>nano /etc/sysctl.d/99-sysctl.conf</code></p>
+<p class="screenshot">[Нужен скриншот: файла /etc/sysctl.d/99-sysctl.conf с включенным ip_forward на ISP]</p>
+<p>Вставляем ip для isp-hq (172.16.1.1/28) и isp-br (172.16.2.1/28)</p>
+<p class="screenshot">[Нужен скриншот: настроенных интерфейсов ISP (ens19 — 172.16.1.1/28, ens20 — 172.16.2.1/28)]</p>
+<p>Установка и настройка iptables на ISP:</p>
+<p><code>dnf install -y iptables-services</code></p>
+<p><code>iptables -t nat -A POSTROUTING -s 172.16.1.0/28 -o enp0s3 -j MASQUERADE</code></p>
+<p><code>iptables -t nat -A POSTROUTING -s 172.16.2.0/28 -o enp0s3 -j MASQUERADE</code></p>
+<p><code>iptables -A FORWARD -i enp0s8 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -i enp0s9 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT</code></p>
+<p>iptables-save &gt; /etc/sysconfig/iptables</p>
+<p><code>systemctl restart iptables</code></p>
+<p class="screenshot">[Нужен скриншот: работающих правил iptables на ISP (iptables -t nat -L -n -v)]</p>
+<h3>Настройка HQ-RTR</h3>
+<p>Переходим в HQ-RTR</p>
+<p>В /etc/sysctl.d/99-sysctl.conf вставляем net.ipv4.ip_forward = 1</p>
+<p class="screenshot">[Нужен скриншот: файла /etc/sysctl.d/99-sysctl.conf с включенным ip_forward на HQ-RTR]</p>
+<p>Настройка интерфейсов HQ-RTR:</p>
+<p><code>enp0s3: Адрес 172.16.1.2/28, Шлюз 172.16.1.1, DNS 77.88.8.8</code></p>
+<p class="screenshot">[Нужен скриншот: настроенного интерфейса enp0s3 на HQ-RTR (172.16.1.2/28)]</p>
+<h2>4. Коммутация в сегменте HQ</h2>
+<p>Задание: Настройте коммутацию в сегменте HQ следующим образом: трафик HQ-SRV должен принадлежать VLAN 100, трафик HQ-CLI должен принадлежать VLAN 200, предусмотрите возможность передачи трафика управления в VLAN 999, реализуйте на HQ-RTR маршрутизацию трафика всех указанных VLAN с использованием одного сетевого адаптера ВМ/физического порта. Сведения о настройке коммутации внесите в отчёт.</p>
+<p>Настройка VLAN на HQ-RTR:</p>
+<p>Устройство enp0s8.100 — Адреса 192.168.100.1/27</p>
+<p>Устройство enp0s8.200 — Адреса 192.168.200.1/27</p>
+<p>Устройство enp0s8.999 — Адреса 192.168.99.1/29</p>
+<p class="screenshot">[Нужен скриншот: настроенных VLAN-интерфейсов на HQ-RTR (enp0s8.100, enp0s8.200, enp0s8.999)]</p>
+<h2>6. Конфигурация IP туннеля между HQ и BR</h2>
+<p>Задание: Между офисами HQ и BR, на маршрутизаторах HQ-RTR и BR-RTR необходимо сконфигурировать IP туннель: на выбор технологии GRE или IP in IP. Сведения о туннеле занесите в отчёт.</p>
+<p>Создали тунель на HQ-RTR:</p>
+<p>Имя профиля: tun1</p>
+<p>Устройство: tun1</p>
+<p>Родительский: enp0s3</p>
+<p>Локальный IP: 172.16.1.2</p>
+<p>Удаленный IP: 172.16.2.2</p>
+<p>IPv4 вручную: 10.0.0.1/30</p>
+<p class="screenshot">[Нужен скриншот: настроенного туннеля tun1 на HQ-RTR (ip addr show tun1)]</p>
+<p>Настройка iptables на HQ-RTR:</p>
+<p><code>iptables -t nat -A POSTROUTING -s 192.168.100.0/27 -o enp0s3 -j MASQUERADE</code></p>
+<p><code>iptables -t nat -A POSTROUTING -s 192.168.200.0/27 -o enp0s3 -j MASQUERADE</code></p>
+<p><code>iptables -t nat -A POSTROUTING -s 192.168.99.0/29 -o enp0s3 -j MASQUERADE</code></p>
+<p><code>iptables -A FORWARD -i enp0s8 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -i enp0s8.100 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -i enp0s8.200 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -i enp0s8.999 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT</code></p>
+<p><code>iptables -I FORWARD -i tun0 -j ACCEPT</code></p>
+<p><code>iptables -I FORWARD -o tun0 -j ACCEPT</code></p>
+<p>iptables-save &gt; /etc/sysconfig/iptables</p>
+<p><code>systemctl restart iptables</code></p>
+<p class="screenshot">[Нужен скриншот: работающих правил iptables на HQ-RTR]</p>
+<h3>Настройка BR-RTR</h3>
+<p>Вставим ip_forward 1 на BR-RTR</p>
+<p>Настройка интерфейсов BR-RTR:</p>
+<p><code>enp0s3: Адрес 172.16.2.2/28, Шлюз 172.16.2.1, DNS 77.88.8.8</code></p>
+<p class="screenshot">[Нужен скриншот: настроенного интерфейса enp0s3 на BR-RTR (172.16.2.2/28)]</p>
+<p>br-local — enp0s8: Адреса 192.168.30.1/28</p>
+<p class="screenshot">[Нужен скриншот: настроенного интерфейса enp0s8 (br-local) на BR-RTR (192.168.30.1/28)]</p>
+<p>Создали тунель на BR-RTR:</p>
+<p>Имя профиля: tun1</p>
+<p>Устройство: tun1</p>
+<p>Родительский: enp0s3</p>
+<p>Локальный IP: 172.16.2.2</p>
+<p>Удаленный IP: 172.16.1.2</p>
+<p>IPv4 вручную: 10.0.0.2/30</p>
+<p class="screenshot">[Нужен скриншот: настроенного туннеля tun1 на BR-RTR]</p>
+<p>Установка iptables на BR-RTR:</p>
+<p><code>dnf install -y iptables-services</code></p>
+<p><code>iptables -t nat -A POSTROUTING -s 192.168.30.0/28 -o enp0s3 -j MASQUERADE</code></p>
+<p><code>iptables -A FORWARD -i enp0s8 -o enp0s3 -j ACCEPT</code></p>
+<p><code>iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT</code></p>
+<p><code>iptables -I FORWARD -i tun0 -j ACCEPT</code></p>
+<p><code>iptables -I FORWARD -o tun0 -j ACCEPT</code></p>
+<p>iptables-save &gt; /etc/sysconfig/iptables</p>
+<p><code>systemctl restart iptables</code></p>
+<p class="screenshot">[Нужен скриншот: работающих правил iptables на BR-RTR]</p>
+<p><code>nmcli connection modify tun1 ip-tunnel.ttl 255</code></p>
+<h2>7. Настройка динамической маршрутизации (OSPF)</h2>
+<p>Задание: Обеспечьте динамическую маршрутизацию на маршрутизаторах HQ-RTR и BR-RTR: сети одного офиса должны быть доступны из другого офиса и наоборот. Для обеспечения динамической маршрутизации используйте link state протокол на усмотрение участника: разрешите выбранный протокол только на интерфейсах IP туннеля, маршрутизаторы должны делиться маршрутами только друг с другом, обеспечьте защиту выбранного протокола посредством парольной защиты. Сведения о настройке и защите протокола занесите в отчёт.</p>
+<p>Настройка OSPF на HQ-RTR:</p>
+<p><code>dnf install -y frr</code></p>
+<p><code>nano /etc/frr/daemons # включаем ospfd</code></p>
+<p class="screenshot">[Нужен скриншот: включенного ospfd в /etc/frr/daemons на HQ-RTR]</p>
+<p><code>systemctl start frr</code></p>
+<p><code>vtysh</code></p>
+<p><code>configure terminal</code></p>
+<p><code>router ospf</code></p>
+<p><code>ospf router-id 1.1.1.1</code></p>
+<p><code>passive-interface default</code></p>
+<p><code>network 10.0.0.0/30 area 0</code></p>
+<p><code>network 192.168.100.0/27 area 0</code></p>
+<p><code>network 192.168.200.0/27 area 0</code></p>
+<p><code>network 192.168.99.0/29 area 0</code></p>
+<p><code>area 0 authentication</code></p>
+<p><code>exit</code></p>
+<p><code>interface tun1</code></p>
+<p><code>no ip ospf network broadcast</code></p>
+<p><code>no ip ospf passive</code></p>
+<p><code>ip ospf authentication</code></p>
+<p><code>ip ospf authentication-key P@ssw0rd</code></p>
+<p><code>exit</code></p>
+<p><code>end</code></p>
+<p><code>write</code></p>
+<p><code>systemctl enable --now frr</code></p>
+<p><code>systemctl restart frr</code></p>
+<p>Настройка OSPF на BR-RTR:</p>
+<p><code>dnf install -y frr</code></p>
+<p><code>nano /etc/frr/daemons # включаем ospfd</code></p>
+<p><code>systemctl start frr</code></p>
+<p><code>vtysh</code></p>
+<p><code>configure terminal</code></p>
+<p><code>router ospf</code></p>
+<p><code>ospf router-id 2.2.2.2</code></p>
+<p><code>passive-interface default</code></p>
+<p><code>network 10.0.0.0/30 area 0</code></p>
+<p><code>network 192.168.30.0/28 area 0</code></p>
+<p><code>area 0 authentication</code></p>
+<p><code>exit</code></p>
+<p><code>interface tun1</code></p>
+<p><code>no ip ospf network broadcast</code></p>
+<p><code>no ip ospf passive</code></p>
+<p><code>ip ospf authentication</code></p>
+<p><code>ip ospf authentication-key P@ssw0rd</code></p>
+<p><code>exit</code></p>
+<p><code>end</code></p>
+<p><code>write</code></p>
+<p><code>systemctl enable --now frr</code></p>
+<p><code>systemctl restart frr</code></p>
+<p>Проверка OSPF:</p>
+<p><code>vtysh</code></p>
+<p><code>show ip ospf neighbor</code></p>
+<p><code>show ip ospf route</code></p>
+<p class="screenshot">[Нужен скриншот: проверки OSPF: show ip ospf neighbor и show ip ospf route на HQ-RTR или BR-RTR]</p>
+<h2>3. Локальные учётные записи</h2>
+<p>Задание: Создайте локальные учётные записи на серверах HQ-SRV и BR-SRV: пользователя sshuser с паролем P@ssw0rd, идентификатор пользователя 2026, пользователь sshuser должен иметь возможность запускать sudo без ввода пароля. Создайте пользователя net_admin на маршрутизаторах HQ-RTR и BR-RTR с паролем P@ssw0rd, при настройке ОС на базе Linux запускать sudo без ввода пароля.</p>
+<p>Создание пользователя net_admin на HQ-RTR и BR-RTR:</p>
+<p><code>useradd -u 2026 net_admin</code></p>
+<p><code>passwd net_admin</code></p>
+<p class="screenshot">[Нужен скриншот: созданного пользователя net_admin (id net_admin)]</p>
+<p><code>nano /etc/sudoers</code></p>
+<p>net_admin ALL=(ALL) NOPASSWD: ALL</p>
+<p class="screenshot">[Нужен скриншот: настроенного sudoers для net_admin]</p>
+<p>sshuser на HQ-SRV и BR-SRV:</p>
+<p><code>useradd -u 2026 -m -s /bin/bash sshuser</code></p>
+<p><code>passwd sshuser</code></p>
+<p><code>nano /etc/sudoers</code></p>
+<p>sshuser ALL=(ALL) NOPASSWD: ALL</p>
+<p class="screenshot">[Нужен скриншот: созданного пользователя sshuser (id sshuser)]</p>
+<h2>11. Настройка часового пояса</h2>
+<p>Задание: Настройте часовой пояс на всех устройствах (за исключением виртуального коммутатора, в случае его использования) согласно месту проведения экзамена.</p>
+<p>Установка времени на всех машинах:</p>
+<p><code>timedatectl set-timezone Europe/Moscow</code></p>
+<p><code>timedatectl status</code></p>
+<p class="screenshot">[Нужен скриншот: timedatectl status на нескольких машинах (показывающий Europe/Moscow)]</p>
+<h2>Настройка HQ-SRV и BR-SRV</h2>
+<p>Интернет на HQ-SRV как VLAN:</p>
+<p>hq-local — enp0s3.100</p>
+<p>Адрес 192.168.100.2/27</p>
+<p>Шлюз 192.168.100.1</p>
+<p>DNS 77.88.8.8</p>
+<p class="screenshot">[Нужен скриншот: настроенного интерфейса enp0s3.100 на HQ-SRV (192.168.100.2/27)]</p>
+<p>Интернет на BR-SRV (не как VLAN):</p>
+<p>br-local — enp0s3</p>
+<p>Адрес 192.168.30.2/28</p>
+<p>Шлюз 192.168.30.1</p>
+<p>DNS 77.88.8.8</p>
+<p class="screenshot">[Нужен скриншот: настроенного интерфейса enp0s3 на BR-SRV (192.168.30.2/28)]</p>
+<h2>5. Безопасный удаленный доступ (SSH)</h2>
+<p>Задание: Настройте безопасный удаленный доступ на серверах HQ-SRV и BR-SRV: для подключения используйте порт 2026, разрешите подключения исключительно пользователю sshuser, ограничьте количество попыток входа до двух, настройте баннер «Authorized access only».</p>
+<p>SSH настройка на HQ-SRV и BR-SRV:</p>
+<p>Обязательно нужно создавать конфиг файл в sshd_config.d папке а не в ssh_config.d</p>
+<p><code>nano /etc/ssh/sshd_config.d/ssh.conf</code></p>
+<p>Port 2026</p>
+<p>AllowUsers sshuser</p>
+<p>MaxAuthTries 2</p>
+<p>Banner /etc/ssh/banner</p>
+<p class="screenshot">[Нужен скриншот: содержимого /etc/ssh/sshd_config.d/ssh.conf (порт 2026, AllowUsers sshuser)]</p>
+<p>Создание баннера:</p>
+<p><code>nano /etc/ssh/banner</code></p>
+<p>Authorised access only!</p>
+<p class="screenshot">[Нужен скриншот: файла баннера /etc/ssh/banner с текстом &quot;Authorised access only!&quot;]</p>
+<p>Открытие порта 2026 для SELinux:</p>
+<p><code>dnf install -y policycoreutils-python-utils</code></p>
+<p><code>semanage port -a -t ssh_port_t -p tcp 2026</code></p>
+<p><code>systemctl restart sshd</code></p>
+<p><code>ss -tlnp | grep 2026</code></p>
+<p class="screenshot">[Нужен скриншот: прослушивания порта 2026 (ss -tlnp | grep 2026)]</p>
+<p>Проверка SSH с другой машины:</p>
+<p><code>ssh sshuser@192.168.30.2 -p 2026</code></p>
+<p>Как раз увидишь Banner</p>
+<p class="screenshot">[Нужен скриншот: успешного подключения по SSH с отображением баннера]</p>
+<h2>9. Протокол динамической конфигурации хостов (DHCP)</h2>
+<p>Задание: Настройте протокол динамической конфигурации хостов для сети в сторону HQ-CLI: настройте нужную подсеть, в качестве сервера DHCP выступает маршрутизатор HQ-RTR, клиентом является машина HQ-CLI, исключите из выдачи адрес маршрутизатора, адрес шлюза по умолчанию — адрес маршрутизатора HQ-RTR, адрес DNS-сервера для машины HQ-CLI — адрес сервера HQ-SRV, DNS-суффикс — au-team.irpo. Сведения о настройке протокола занесите в отчёт.</p>
+<p>Настройка DHCP на HQ-RTR:</p>
+<p><code>dnf install -y dhcp-server</code></p>
+<p><code>nano /etc/dhcp/dhcpd.conf</code></p>
+<p><code>default-lease-time 86400;
+max-lease-time 86400;
+subnet 192.168.200.0 netmask 255.255.255.224 {
+  range 192.168.200.2 192.168.200.30;
+  option routers 192.168.200.1;
+  option domain-name-servers 192.168.100.2;
+  option domain-name &quot;au-team.irpo&quot;;
+}</code></p>
+<p class="screenshot">[Нужен скриншот: конфигурации DHCP в /etc/dhcp/dhcpd.conf]</p>
+<p>Указываем интерфейс для DHCP:</p>
+<p><code>nano /etc/sysconfig/dhcpd</code></p>
+<p><code>DHCPDARGS=enp0s8.200</code></p>
+<p class="screenshot">[Нужен скриншот: файла /etc/sysconfig/dhcpd с указанием интерфейса enp0s8.200]</p>
+<p>Подключаем HQ-CLI к VLAN 200:</p>
+<p>Имя профиля: hq-local</p>
+<p>Устройство: enp0s3.200</p>
+<p>Все остальное автоматически</p>
+<p class="screenshot">[Нужен скриншот: HQ-CLI с автоматически полученным IP по DHCP (ip addr show)]</p>
+<h2>10. Инфраструктура разрешения доменных имён</h2>
+<p>Задание: Настройте инфраструктуру разрешения доменных имён для офисов HQ и BR: основной DNS-сервер реализован на HQ-SRV, сервер должен обеспечивать разрешение имён в сетевые адреса устройств и обратно в соответствии с таблицей 3, в качестве DNS сервера пересылки используйте любой общедоступный DNS сервер (77.88.8.7, 77.88.8.3 или другие).</p>
+<p>Настройка DNS на HQ-SRV:</p>
+<p><code>dnf install -y bind bind-utils</code></p>
+<p><code>nano /etc/named.conf</code></p>
+<p>Вставляем в &quot;options&quot;:</p>
+<p><code>listen-on port 53 { 127.0.0.1; 192.168.100.2; };</code></p>
+<p><code>allow-query { any; };</code></p>
+<p><code>forwarders {77.88.8.8; 8.8.8.8; 1.1.1.1; };</code></p>
+<p><code>recursion yes;</code></p>
+<p>Убираем копии этих параметров в файле чтобы было по одному параметру.</p>
+<p>В конце /etc/named.conf указываем наши зоны:</p>
+<p><code>zone &quot;au-team.irpo&quot; IN {
+  type master;
+  file &quot;/var/named/au-team.irpo.zone&quot;;
+};
+zone &quot;100.168.192.in-addr.arpa&quot; IN {
+  type master;
+  file &quot;/var/named/rev.100.zone&quot;;
+};
+zone &quot;200.168.192.in-addr.arpa&quot; IN {
+  type master;
+  file &quot;/var/named/rev.200.zone&quot;;
+};</code></p>
+<p class="screenshot">[Нужен скриншот: файла /etc/named.conf с настроенными зонами]</p>
+<p>Теперь сами файлы зон:</p>
+<p><code>nano /var/named/au-team.irpo.zone</code></p>
+<p>$TTL 86400
+@ IN SOA hq-srv.au-team.irpo. admin.au-team.irpo. (
+  2026061201 3600 1800 604800 86400 )
+@ IN NS hq-srv.au-team.irpo.
+hq-rtr IN A 172.16.1.2
+br-rtr IN A 172.16.2.2
+hq-srv IN A 192.168.100.2
+hq-cli IN A 192.168.200.2
+br-srv IN A 192.168.30.2
+docker IN A 172.16.1.1
+web IN A 172.16.2.1
+_kerberos._tcp IN SRV 0 0 88 br-srv.au-team.irpo.
+_ldap._tcp IN SRV 0 0 389 br-srv.au-team.irpo.</p>
+<p class="screenshot">[Нужен скриншот: файла зоны /var/named/au-team.irpo.zone]</p>
+<p><code>nano /var/named/rev.100.zone</code></p>
+<p>$TTL 86400
+@ IN SOA hq-srv.au-team.irpo. admin.au-team.irpo. (
+  2026061201 3600 1800 604800 86400 )
+@ IN NS hq-srv.au-team.irpo.
+2 IN PTR hq-srv.au-team.irpo.
+1 IN PTR hq-rtr.au-team.irpo.</p>
+<p><code>nano /var/named/rev.200.zone</code></p>
+<p>$TTL 86400
+@ IN SOA hq-srv.au-team.irpo. admin.au-team.irpo. (
+  2026061201 3600 1800 604800 86400 )
+@ IN NS hq-srv.au-team.irpo.
+2 IN PTR hq-cli.au-team.irpo.</p>
+<p>Даем права сервису прочитать наши зоны:</p>
+<p><code>chown named:named /var/named/*.zone</code></p>
+<p>Проверки:</p>
+<p><code>named-checkconf</code></p>
+<p><code>named-checkzone au-team.irpo /var/named/au-team.irpo.zone</code></p>
+<p><code>systemctl enable --now named</code></p>
+<p class="screenshot">[Нужен скриншот: проверки named-checkconf и named-checkzone]</p>
+<p>Проверка разрешения имён:</p>
+<p><code>dig @192.168.100.2 hq-srv.au-team.irpo</code></p>
+<p class="screenshot">[Нужен скриншот: результата dig @192.168.100.2 hq-srv.au-team.irpo — должно вернуть IP]</p>
+<p>После настройки DNS на HQ-SRV необходимо обновить адрес DNS в nmtui на BR-SRV: Серверы DNS — 192.168.100.2</p>
+<p class="screenshot">[Нужен скриншот: обновлённых DNS-настроек на BR-SRV (192.168.100.2)]</p>
+</body>
+</html>
